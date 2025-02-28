@@ -1,0 +1,36 @@
+syntax = "proto3";
+package webpubsub;
+
+message UpstreamMessage {
+    oneof message {
+        JoinGroupMessage join_group_message = 1;
+        EventMessage event_message = 2;
+    }
+}
+
+message JoinGroupMessage {
+    string group = 1;
+}
+
+message EventMessage {
+    string event_name = 1;
+    MessageData data = 2;
+}
+
+message MessageData {
+    oneof data {
+        string text_data = 1;
+        bytes binary_data = 2;
+    }
+}
+
+message DownstreamMessage {
+    oneof message {
+        GroupDataMessage group_data_message = 1;
+    }
+}
+
+message GroupDataMessage {
+    string group = 1;
+    MessageData data = 2;
+}
