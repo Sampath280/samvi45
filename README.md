@@ -165,7 +165,12 @@ namespace ServiceBus.DLQ.Reader
 
 
 
-**Updated code **
+****Updated code: ****
+ Messages are NOT completed as they arrive → They are stored in _messages and processed later in batches.
+Messages are grouped by sessionId → The _messages dictionary ensures messages from the same session are stored together.
+Batch processing is handled in memory before database updates → The ProcessBatchAsync method updates the database before completing messages.
+ Messages are only completed after successful processing → If the app crashes before processing, messages remain in the queue and are not lost.
+
 ```c#
 using System;
 using System.Collections.Generic;
