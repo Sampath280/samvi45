@@ -162,3 +162,179 @@ namespace ServiceBus.DLQ.Reader
 }
 
 ```
+
+
+
+**Updated code **
+```c#
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Azure.Messaging.ServiceBus;
+
+public class SessionMessageProcessor
+{
+    private static readonly object _lock = new object();
+
+    // Dictionary to store session messages
+    private static IDictionary<string, (GroupedSession session, SemaphoreSlim semaphore)> _messages
+        = new Dictionary<string, (GroupedSession, SemaphoreSlim)>();
+
+    private readonly ServiceBusClient _client;
+    private readonly ServiceBusSessionProcessor _processor;
+
+    public SessionMessageProcessor(string connectionString, string queueName)
+    {
+        _client = new ServiceBusClient(connectionString);
+        _processor = _client.CreateSessionProcessor(queueName, new ServiceBusSessionProcessorOptions
+        {
+            AutoCompleteMessages = false, // Ensure manual completion
+            MaxConcurrentSessions = 5,
+            MaxConcurrentCallsPerSession = 1,
+            SessionIdleTimeout = TimeSpan.FromSeconds(30)
+        });
+
+        _processor.ProcessMessageAsync += MessageHandler;
+        _processor.ProcessErrorAsync += ErrorHandler;
+    }
+
+    public async Task StartAsync()
+    {
+        await _processor.StartProcessingAsync();
+        Task.Run(() => BackgroundBatchProcessing());
+    }
+
+    public async Task StopAsync()
+    {
+        await _processor.StopProcessingAsync();
+        await _client.DisposeAsync();
+    }
+
+    private async Task MessageHandler(ProcessSessionMessageEventArgs args)
+    {
+        string sessionId = args.SessionId;
+        var message = args.Message;
+
+        lock (_lock)
+        {
+            if (!_messages.ContainsKey(sessionId))
+            {
+                _messages[sessionId] = (new GroupedSession
+                {
+                    Timestamp = DateTime.Now,
+                    Messages = new List<ServiceBusReceivedMessage> { message },
+                    Args = args //  Store args here to prevent null references!
+                }, new SemaphoreSlim(1, 1));
+            }
+            else
+            {
+                _messages[sessionId].session.Messages.Add(message);
+            }
+        }
+    }
+
+    private async Task ProcessBatchAsync(string sessionId)
+    {
+        if (!_messages.ContainsKey(sessionId)) return;
+
+        var (session, semaphore) = _messages[sessionId];
+
+        await semaphore.WaitAsync();
+        try
+        {
+            // Ensure session.Args is not null before calling RenewSessionLockAsync()
+            if (session.Args == null)
+            {
+                Console.WriteLine($"Session Args is null for sessionId: {sessionId}");
+                return;
+            }
+
+            await session.Args.RenewSessionLockAsync();
+
+            // Simulate batch processing (e.g., updating database)
+            await UpdateDatabaseAsync(session.Messages);
+
+            //  Complete messages only after processing is successful
+            foreach (var msg in session.Messages)
+            {
+                await session.Args.CompleteMessageAsync(msg);
+            }
+
+            //  Remove session from dictionary after processing
+            lock (_lock)
+            {
+                _messages.Remove(sessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing batch for session {sessionId}: {ex.Message}");
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    private async Task BackgroundBatchProcessing()
+    {
+        while (true)
+        {
+            List<string> sessionIds;
+            lock (_lock)
+            {
+                sessionIds = _messages.Keys.ToList();
+            }
+
+            foreach (var sessionId in sessionIds)
+            {
+                await ProcessBatchAsync(sessionId);
+            }
+
+            await Task.Delay(1000); // Adjust delay as needed
+        }
+    }
+
+    private async Task UpdateDatabaseAsync(List<ServiceBusReceivedMessage> messages)
+    {
+        // Simulate database update
+        await Task.Delay(500);
+        Console.WriteLine($"Processed {messages.Count} messages.");
+    }
+
+    private Task ErrorHandler(ProcessErrorEventArgs args)
+    {
+        Console.WriteLine($"Error: {args.Exception.Message}");
+        return Task.CompletedTask;
+    }
+}
+
+public class GroupedSession
+{
+    public DateTime Timestamp { get; set; }
+    public List<ServiceBusReceivedMessage> Messages { get; set; } = new List<ServiceBusReceivedMessage>();
+    public ProcessSessionMessageEventArgs Args { get; set; } //  Ensure this is stored correctly
+}
+
+// Usage Example
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        // Securely replace with your Service Bus details
+        string connectionString = "Your_Secure_Connection_String";
+        string queueName = "YourQueueName";
+
+        var processor = new SessionMessageProcessor(connectionString, queueName);
+        await processor.StartAsync();
+
+        Console.WriteLine("Press any key to stop...");
+        Console.ReadKey();
+
+        await processor.StopAsync();
+    }
+}
+```
+
