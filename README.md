@@ -1,3 +1,4 @@
+```c#
 using Azure.Messaging.ServiceBus;
 using System;
 using System.Collections.Concurrent;
@@ -159,3 +160,5 @@ namespace ServiceBus.DLQ.Reader
         }
     }
 }
+
+```
