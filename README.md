@@ -137,3 +137,4 @@ https://login.microsoftonline.com/{external-tenant-id}/adminconsent?client_id={f
 
 Answered using Microsoft Docs: [OAuth2 Auth Code Flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow), [App registration best practices](https://learn.microsoft.com/en-us/azure/active-directory/develop/howto-convert-app-to-be-multi-tenant), and [MSAL token handling](https://learn.microsoft.com/en-us/entra/msal/overview).
 
+let know if helped will post this as answer so it helps others . So  you accept below answer by following  [link](https://meta.stackexchange.com/questions/5234/how-does-accepting-an-answer-work/5235#5235) to reach others as well
